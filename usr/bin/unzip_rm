@@ -1,0 +1,71 @@
+#!/bin/bash
+
+if [ "$#" == "0" ] || [ "x$1" == "x--help" ] || [ "x$1" == "x-h" ]; then
+	echo "Usage: $0 [-nonice] [zip-file(-prefix)]"
+	exit 1
+fi
+
+PARAMS=""
+CMD="unzip"
+RMCMD="rm -v --"
+
+NICE=""
+if which ionice >/dev/null; then
+        NICE="ionice -c 3"
+fi
+if which nice >/dev/null; then
+        NICE="nice -n 19 $NICE"
+fi
+while [ "$#" -gt "1" ]; do
+	if [ "x$1" == "x-nonice" ]; then
+		NICE=""
+	else
+		PARAMS="$PARAMS $1"
+	fi
+	shift
+done
+if [ -n "$NICE" ]; then
+	CMD="$NICE $CMD"
+	RMCMD="$NICE $RMCMD"
+fi
+
+_unzip() {
+	#(unzip $PARAMS "${1}" -x __MACOSX/* */.BridgeSort */Thumbs.db Thumbs.db 3>&1 1>&2 2>&3 | grep -vwE '^caution: excluded filename not matched:') 3>&1 1>&2 2>&3
+	$CMD $PARAMS "${1}" -x '__MACOSX/*' '*/.BridgeSort' '*/Thumbs.db' 'Thumbs.db' '*.url' '*/*.url' '*.URL' '*/*.URL'
+}
+
+PREFIX="${1}"
+SUFFIX=".zip"
+START=1
+DIGITS=1
+if [ -f "${1}" ]; then
+	_unzip "${1}" || exit 2
+	$RMCMD "${1}"
+	exit 0
+else
+	START=0
+	DIGITS=2
+	SUFFIX=""
+	if [ -f "${1}.zip" ]; then
+		_unzip "${1}.zip" || exit 2
+		$RMCMD "${1}.zip"
+		# PREFIX="${1}.z"
+		exit 0
+	elif [ -f "${1}ip" ]; then
+		_unzip "${1}ip" || exit 2
+		$RMCMD "${1}ip"
+	else
+		echo "Cannot find any suitable zip archive."
+		exit 1
+	fi
+fi
+for (( i=$START ; i <= 999 ; i=i+1 )); do
+	n="$i"
+	while [ ${#n} -lt $DIGITS ]; do n="0$n"; done
+	F="$PREFIX$n$SUFFIX"
+	if [ -f "$F" ]; then
+		$RMCMD "$F"
+	else
+		exit 0
+	fi
+done

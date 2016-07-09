@@ -1,0 +1,102 @@
+#!/bin/bash
+
+if [ "$#" == "0" ] || [ "x$1" == "x--help" ] || [ "x$1" == "x-h" ]; then
+	echo "Usage: $0 [file [...]]"
+	exit 1
+fi
+_renamed=0
+_err=0
+_suffix="jpg"
+function rename() {
+	if ! [ -e "$1" ]; then
+		_ierr=true
+		_imsg="$_imsg Cannot rename '$1' to '$2' because the former does not exist."
+		return 1
+	fi
+	if [ -e "$2" ]; then
+		_ierr=true
+		_imsg="$_imsg Cannot rename '$1' to '$2' because the latter exists."
+		return 1
+	fi
+	if ! mv -T "$1" "$2"; then
+		_ierr=true
+		_imsg="$_imsg Error renaming '$1' to '$2'"
+		return 1
+	fi
+	_imsg="$_imsg Renamed '$1' to '$2'"
+	_renamed=$((_renamed+1))
+	return 0
+}
+function process() {
+	if ! [ -f "$1" ]; then
+		_imsg="$_imsg No such file."
+		return 1
+	fi
+	local mime="$(file -b --mime-type "$1")"
+	local newExt=""
+	case "$mime" in
+		"image/png"|"image/gif"|"image/bmp"|"text/html"|"video/webm"|"video/mp4")
+			newExt="${mime##*/}"
+			;;
+		"image/jpeg")
+			newExt="jpg"
+			;;
+		"text/plain")
+			newExt="txt"
+			;;
+		"video/x-matroska")
+			newExt="mkv"
+			;;
+		*)
+			_imsg="$_imsg Unsupported file type: $mime"
+			return 1
+			;;
+	esac
+	local oldExt="${1##*\.}"
+	if [ "$oldExt" == "$1" ]; then
+		_imsg="$_imsg Missing extension."
+		oldExt=""
+	else
+		oldExt="${oldExt,,}"
+		if [ "$oldExt" == "$newExt" ]; then
+			return 0;
+		fi
+		case "$oldExt" in
+			jpg|jpeg|png|gif|bmp|html|htm|txt|webm|mkv|mp4)
+				;;
+			*)
+				_imsg="$_imsg Existing extension unknown: $oldExt"
+				oldExt=""
+				;;
+		esac
+	fi
+	local baseName
+	if [ -z "$oldExt" ]; then
+		baseName="${1}."
+	else
+		baseName="${1:0:-${#oldExt}}"
+	fi
+	if rename "$1" "${baseName}${newExt}"; then return 0; else return 1; fi
+}
+while [ $# -ne 0  ]; do
+	_imsg=""
+	_ierr=false
+	if ! process "$1"; then _err=$((_err+1)); fi
+	if [ "x$_imsg" != "x" ]; then
+		if $_ierr; then echo -n "Error with "; fi
+		echo "$1:$_imsg"
+	fi
+	shift
+done
+if [ "$_renamed" == "0" ] && [ "$_err" == "0" ]; then
+	exit 0
+fi
+echo -n "Renamed $_renamed file"
+if ! [ "$_renamed" == "1" ]; then echo -n "s"; fi
+if [ "$_err" == "0" ]; then
+	echo ". All OK."
+else
+	echo -n ". $_err error"
+	if [ "$_err" == "1" ]; then echo "."; else echo "s."; fi
+fi
+

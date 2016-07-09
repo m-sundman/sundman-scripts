@@ -1,0 +1,11 @@
+#!/bin/bash
+if [ "$#" != "1" ] || ! [ -d "$1" ] || ! [ -r "$1" ] || ! [ -x "$1" ]; then
+	echo "Usage $0 <dir-with-dvd-files>"
+	exit 1
+else
+	mplayer -vo null -ao null -frames 0 -identify dvd://1 -dvd-device "$1" 2>/dev/null |
+		grep "^ID" |
+		sed -e 's/[`\\!$"]/\\&/g' |
+		sed -e '/^ID_FILENAME/ { s/^ID_FILENAME=\(.*\)/ID_FILENAME="\1"/g; }'
+fi
+

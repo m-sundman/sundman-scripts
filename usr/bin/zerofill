@@ -1,0 +1,76 @@
+#!/bin/bash
+
+_prog="$0"
+function usage() {
+	echo "Usage: $_prog [-d dir] [-s size] [--] file[...]"
+	echo "All specified files will become filled with zeros."
+	echo "   -h         show this help text"
+	echo "   -d dir     put new file(s) in 'dir' instead of replacing the original file(s)"
+	echo "   -s size    make the file(s) 'size' bytes instead of their original size"
+	echo "   --         end of options"
+	exit 1
+}
+
+if [ "$#" == "0" ] || [ "$1" == "--help" ] || [ "$1" == "-h" ]; then
+	usage
+fi
+_dir=""
+_size=""
+while [ "$#" -gt "0" ]; do
+	if [ "$1" == "--" ]; then
+		shift
+		break
+	elif [ "${1:0:2}" == "-s" ]; then
+		if [ "${#1}" -gt "2" ]; then
+			_size="${1:2}"
+		else
+			shift
+			if [ "$#" -gt "0" ]; then
+				_size="$1"
+			else
+				usage
+			fi
+		fi
+		echo "size: $_size"
+	elif [ "${1:0:2}" == "-d" ]; then
+		if [ "${#1}" -gt "2" ]; then
+			_dir="${1:2}"
+		else
+			shift
+			if [ "$#" -gt "0" ]; then
+				_dir="$1"
+			else
+				usage
+			fi
+		fi
+		if ! [ -d "$_dir" ]; then
+			echo "No such directory: $_dir"
+			usage
+		fi
+		echo "dir: $_dir"
+	elif [ "${1:0:1}" == "-" ]; then
+		usage
+	else
+		break
+	fi
+	shift
+done
+while [ "$#" -gt "0"  ]; do
+	if [ -z "$_size" ]; then
+		_s=$(stat -c%s "$1")
+	else
+		_s="$_size"
+	fi
+	_file="$1"
+	if [ -n "$_dir" ]; then
+		_file="${_dir}/${_file##*/}"
+	fi
+	echo -n "Zero '$_file', size $_s ... "
+	if truncate --size=0 "$_file" && truncate --size=$_s "$_file"; then
+		echo "OK"
+	else
+		echo "ERROR"
+		return 2
+	fi
+	shift
+done

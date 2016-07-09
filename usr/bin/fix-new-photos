@@ -1,0 +1,230 @@
+#!/bin/bash
+
+_count=0
+_err=0
+_suffix="jpg"
+_outdir=""
+_tmpdir=""
+_rm_ori=true
+
+function usage() {
+	echo "Usage: $0 [-k] [-o <dir>] [picture [...]]"
+	echo "Options:"
+	echo " -o  The output directory. Defaults is the current dir."
+	echo " -k  Keep the originals instead of deleting them."
+	exit 1
+}
+if [ "$#" == "0" ] || [ "x$1" == "x--help" ] || [ "x$1" == "x-h" ]; then usage; fi
+while [ "$#" -gt "0" ] && [ "${1:0:1}" == "-" ]; do
+	case "$1" in
+		-o)
+			if ! [ -d "$2" ]; then
+				echo "Invalid dir: '$2'"
+				usage
+			fi
+			_outdir="$2"
+			if [ "${_outdir:0-1}" != "/" ]; then _outdir="${_outdir}/"; fi
+			shift 2
+			;;
+		-k)
+			_rm_ori=false
+			shift
+			;;
+		*)
+			break
+			;;
+	esac
+done
+function rename_all() {
+	for f in "$1".*; do
+		if [ -f "$f" ]; then
+			local fsuffix="${f:${#1}}"
+			fsuffix="${fsuffix,,}"
+			_out="${new}${fsuffix}"
+			if $_rm_ori; then
+				if ! rename "$f" "$_out"; then
+					warn=true
+				fi
+			else
+				if ! cp -Tv "$f" "$_out"; then
+					_imsg="$_imsg Cannot copy ${f} to ${_out}."
+					warn=true
+				fi
+			fi
+			chmod a+r-x "$_out"
+		fi
+	done
+}
+function rename() {
+	if ! [ -e "$1" ]; then
+		_ierr=true
+		_imsg="$_imsg Cannot rename '$1' to '$2' because the former does not exist."
+		return 1
+	fi
+	if [ -e "$2" ]; then
+		_ierr=true
+		_imsg="$_imsg Cannot rename '$1' to '$2' because the latter exists."
+		return 1
+	fi
+	if ! mv -T "$1" "$2"; then
+		_ierr=true
+		_imsg="$_imsg Error renaming '$1' to '$2'."
+		return 1
+	fi
+	return 0
+}
+function pad() {
+	local out="$2"
+	while [ "${#out}" -lt "$1" ]; do
+		out="0$out"
+	done
+	echo "$out"
+}
+function restoreOpt() {
+	if [ "x$1" != "x" ]; then
+		set +$1
+	fi
+}
+function findfree() {
+	local numlen="$1"
+	local prefix="${2},"
+	local i
+	local max="9999999999999999"
+	max="${max:0:$numlen}"
+	for ((i=0; i<=max; i++)); do
+		if ! [ -e "$prefix$(pad $numlen $i).$_suffix" ]; then
+			echo "$prefix$(pad $numlen $i)"
+			if [ "$i" != "$max" ] && [ -e "$prefix$(pad $numlen $((i+1))),$_suffix" ]; then
+				_imsg="$_imsg Next file already exists: '$prefix$(pad $numlen $((i+1))).$_suffix'."
+				return 1
+			fi
+			return 0
+		fi
+	done
+	echo ""
+	return 2
+}
+function process() {
+	local warn=false
+	local suffix="${1##*\.}"
+	suffix="${suffix,,}"
+	if [ "$suffix" != "jpg" ] && [ "$suffix" != "jpeg" ]; then
+		_imsg="$_imsg Not a jpg/jpeg file."
+		return 1
+	fi
+	if ! [ -f "$1" ]; then
+		_imsg="$_imsg No such file."
+		return 1
+	fi
+	local old="${1%\.*}"
+	local new="$(exiftool -p '$CreateDate' -d '%Y%m%d-%H%M%S' "$1")"
+	if [ "${#new}" != "15" ]; then
+		_imsg="$_imsg Error parsing date/time: '${new}'."
+		return 1
+	fi
+	new="${_outdir}${new}"
+	local level=0
+	if [ -f "${new}.jpg" ]; then
+		level=1
+		rename_all "${new}" "${new},0"
+	elif [ -f "${new},0.jpg" ]; then
+		if [ -f "${new},9.jpg" ]; then
+			level=2
+			for ((i=0; i<=9; i++)); do
+				rename_all "${new},${i}" "${new},0${i}"
+			done
+		else
+			level=1
+		fi
+	elif [ -f "${new},00.jpg" ]; then
+		if [ -f "${new},99.jpg" ]; then
+			level=3
+			for ((i=0; i<=99; i++)); do
+				if ! rename_all "${new},$(pad 2 ${i})" "${new},0$(pad 2 ${i})"; then
+					warn=true
+				fi
+			done
+		else
+			level=2
+		fi
+	elif [ -f "${new},000.jpg" ]; then
+		level=3
+	fi
+	if [ "$level" -gt "0" ]; then
+		local tmp="$(findfree $level "$new")"
+		if [ "$?" == "1" ]; then warn=true; fi
+		if [ -z "$tmp" ]; then
+			imsg="$_imsg Unable to find a free slot for '${new},*.jpg'."
+			return 1
+		fi
+		new="$tmp"
+	fi
+	local _rot1=""
+	local _rot2=""
+	case $(exiftool -Orientation -s3 -n "$1") in
+		6) _rot2="90" ;;
+		3) _rot2="180" ;;
+		8) _rot2="270" ;;
+	esac
+	if [ -n "$_rot2" ]; then
+		_rot1="-Orientation=1"
+		_rot2="-rotate $_rot2"
+	fi
+	local _out="${new}.${_suffix}"
+	if ! exiftool -n -ThumbnailImage= -PreviewImage= -ifd1:all= -trailer:all= $_rot1 - <"$1"|jpegtran $_rot2 -copy all > "$_out"; then
+		_imsg="$_imsg Error processing $1 to $_out"
+		return 1
+	fi
+	chmod a+r-x "$_out"
+	touch -r "$1" "$_out"
+	if $_rm_ori && [ -f "$_out" ] && ! [ "$1" -ef "$_out" ]; then
+		rm $1
+	fi
+	for f in "$old".*; do
+		if [ "$f" != "$1" ] && [ -f "$f" ]; then
+			local fsuffix="${f:${#old}}"
+			fsuffix="${fsuffix,,}"
+			_out="${new}${fsuffix}"
+			if $_rm_ori; then
+				if ! rename "$f" "$_out"; then
+					warn=true
+				fi
+			else
+				if ! cp -Tv "$f" "$_out"; then
+					_imsg="$_imsg Cannot copy ${f} to ${_out}."
+					warn=true
+				fi
+			fi
+			chmod a+r-x "$_out"
+		fi
+	done
+	if $warn; then return 1; else return 0; fi
+}
+if $_rm_ori; then
+	if [ -n "$_outdir" ]; then
+		echo "Removing originals"
+	else
+		echo "Replacing originals"
+	fi
+else
+	echo "Preserving originals"
+fi
+while [ $# -ne 0 ]; do
+	_imsg=""
+	if ! process "$1"; then _err=$((_err+1)); fi
+	if [ "x$_imsg" != "x" ]; then
+		if $_ierr; then echo -n "Error with "; fi
+		echo "$1:$_imsg"
+	fi
+	_count=$((_count+1))
+	shift
+done
+echo -n "Processed $_count file"
+if ! [ "$_count" == "1" ]; then echo -n "s"; fi
+if [ "$_err" == "0" ]; then
+	echo ". All OK."
+else
+	echo -n ". $_err error"
+	if [ "$_err" == "1" ]; then echo "."; else echo "s."; fi
+fi
+

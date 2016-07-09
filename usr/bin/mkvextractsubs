@@ -1,0 +1,54 @@
+#!/bin/bash
+
+if [ "$#" == "0" ] || [ "x$1" == "x--help" ] || [ "x$1" == "x-h" ] || ! [ -e "$1" ]; then
+	echo "Usage: `basename $0` <filename>"
+	echo "Extracts all subtitles (and lyrics) from the specified mkv file."
+	exit 1
+fi
+
+IN="$1"
+BASE="${IN%.*}"
+
+DATA="$(mkvmerge -I "$IN"|sed -r 's/Track ID ([0-9]+): subtitles \(S_(TEXT\/(UTF8|SSA|ASS)|KATE)\) \[language: ?([^ ]+).*/§ID=\1§TYPE=\2§LANG=\4§/'|grep -E '^§[^§]+§[^§]+§[^§]+§$')"
+if [ -z "$DATA" ]; then
+	echo "Error: No subtitles found in '$IN'"
+	exit 1
+fi
+
+CMD="mkvextract tracks '$IN'"
+for s in $DATA; do
+	ID="${s#§ID=}"
+	ID="${ID%%§*}"
+	TYPE="${s#*§TYPE=}"
+	TYPE="${TYPE%%§*}"
+	LANG="${s#*§LANG=}"
+	LANG="${LANG%%§*}"
+	EXT=""
+	case "$TYPE" in
+		"KATE")
+			EXT=".kate"
+		;;
+		"TEXT/UTF8")
+			EXT=".srt"
+		;;
+		"TEXT/SSA")
+			EXT=".ssa"
+		;;
+		"TEXT/ASS")
+			EXT=".ass"
+		;;
+	esac
+	OUT="${BASE}.${LANG}${EXT}"
+	if [ -e	"$OUT" ]; then
+		for (( n=2; ; n=n+1 )); do
+			OUT="${BASE}.${LANG}${n}${EXT}"
+			if ! [ -e "$OUT" ]; then
+				break;
+			fi
+		done
+	fi
+	CMD="$CMD '${ID}:${OUT}'"
+done
+
+eval $CMD
+

@@ -1,0 +1,63 @@
+#!/bin/bash
+
+function usage() {
+	echo "Usage: $0 [-N] [picture [...]]"
+	echo "Rotates the specified picture(s) and also removes embedded thumbnails."
+	echo "Options:"
+	echo " -N  Degrees clockwise, where N is 0, 90, 180, 270, H, V or A."
+	echo "     With -A it rotates/flips according to the EXIF orientation tag."
+	echo "     With -H/-V it flips the image horizontally/vertically."
+	echo "     The EXIF orientation tag is always reset, and embedded thumbnails"
+	echo "     are always removed, and -0 does only these things."
+	exit 1
+}
+if [ "$#" == "0" ] || [ "x$1" == "x--help" ] || [ "x$1" == "x-h" ]; then usage; fi
+rot=""
+case "$1" in
+	-0|-90|-270|-H|-V|-A) rot="${1:1}" ;;
+	*) usage ;;
+esac
+shift
+op=""
+while [ $# -ne 0 ]; do
+	if [ "$rot" == "A" ]; then
+		case $(exiftool -Orientation -s3 -n "$1") in
+			1) op="" ;;
+			2) op="-flip horizontal" ;;
+			3) op="-rotate 180" ;;
+			4) op="-flip vertical" ;;
+			5) op="-transpose" ;;
+			6) op="-rotate 90" ;;
+			7) op="-transverse" ;;
+			8) op="-rotate 270" ;;
+			*)
+				echo "Invalid orientation tag in $1"
+				exit 2
+				;;
+		esac
+	elif [ "$rot" == "H" ]; then
+		op="-flip horizontal"
+	elif [ "$rot" == "V" ]; then
+		op="-flip vertical"
+	elif [ "$rot" != "0" ]; then
+		op="-rotate $rot"
+	fi
+	if [ -n "$op" ]; then
+		tmp="$(mktemp --tmpdir=.)"
+		if ! jpegtran $op -copy all "$1" >"$tmp"; then
+			echo "Error running \"jpegtran $op -copy all \"$1\"."
+			exit 3
+		fi
+		touch -r "$1" "$tmp"
+		if ! ( rm "$1" && mv "$tmp" "$1" ); then
+			echo "Error replacing \"$1\" with \"$tmp\"."
+			exit 4
+		fi
+	fi
+	if ! exiftool -P -n -ThumbnailImage= -PreviewImage= -ifd1:all= -trailer:all= -Orientation=1 -overwrite_original "$1"; then
+		echo "Error resetting orientation tag on \"$1\"."
+		exit 5
+	fi
+	shift
+done
+

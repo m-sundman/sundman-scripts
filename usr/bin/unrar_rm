@@ -1,0 +1,75 @@
+#!/bin/bash
+
+if [ "$#" == "0" ] || [ "x$1" == "x--help" ] || [ "x$1" == "x-h" ]; then
+	echo "Usage: $0 [-nonice] [rar-file(-prefix)]"
+	exit 1
+fi
+
+PARAMS="-x*/Thumbs.db -x__MACOSX -x*/.BridgeSort -x*/*.url -x*/*.URL"
+CMD="unrar"
+EXTRACT="x"
+RMCMD="rm -v --"
+NICE=""
+if which ionice >/dev/null; then
+	NICE="ionice -c 3"
+fi
+if which nice >/dev/null; then
+	NICE="nice -n 19 $NICE"
+fi
+while [ "$#" -gt "1" ]; do
+	if [ "x$1" == "x-nopath" ] || [ "x$1" == "x-e" ]; then
+		EXTRACT="e"
+	elif [ "x$1" == "x-nonice" ]; then
+		NICE=""
+	else
+		PARAMS="$PARAMS $1"
+	fi
+	shift
+done
+if [ -n "$NICE" ]; then
+	CMD="$NICE $CMD"
+	RMCMD="$NICE $RMCMD"
+fi
+PREFIX="${1}"
+SUFFIX=".rar"
+START=1
+DIGITS=1
+PARAMS="$PARAMS $EXTRACT"
+if [ -f "${1}1.rar" ]; then
+	$CMD $PARAMS -- "${1}1.rar" || exit 2
+elif [ -f "${1}01.rar" ]; then
+	$CMD $PARAMS -- "${1}01.rar" || exit 2
+	DIGITS=2
+elif [ -f "${1}001.rar" ]; then
+	$CMD $PARAMS -- "${1}001.rar" || exit 2
+	DIGITS=3
+elif [ -f "${1}" ]; then
+	$CMD $PARAMS -- "${1}" || exit 2
+	$RMCMD "${1}"
+	exit 0
+else
+	START=0
+	DIGITS=2
+	SUFFIX=""
+	if [ -f "${1}.rar" ]; then
+		$CMD $PARAMS -- "${1}.rar" || exit 2
+		$RMCMD "${1}.rar"
+		PREFIX="${1}.r"
+	elif [ -f "${1}ar" ]; then
+		$CMD $PARAMS -- "${1}ar" || exit 2
+		$RMCMD "${1}ar"
+	else
+		echo "Cannot find any suitable rar archive."
+		exit 1
+	fi
+fi
+for (( i=$START ; i <= 999 ; i=i+1 )); do
+	n="$i"
+	while [ ${#n} -lt $DIGITS ]; do n="0$n"; done
+	F="$PREFIX$n$SUFFIX"
+	if [ -f "$F" ]; then
+		$RMCMD "$F"
+	else
+		exit 0
+	fi
+done
