@@ -22,17 +22,7 @@ for pkg in "$pkgdir"/*; do
 	if [ "${pkg:0-4}" == ".res" ] ||  [ "${pkg:0-4}" == ".bin" ]; then continue; fi
 	pkg="${pkg:9}"
 	dir="${pkg}_${version}_all"
-	mkdir -p "$dir/DEBIAN" && cd "$dir/DEBIAN"
-	echo "Package: $pkg" >control
-	echo "Version: $version" >>control
-	cat >>control <<EOF
-Source: sundman-scripts
-Maintainer: Marcus Sundman <sundman@iki.fi>
-Priority: optional
-Architecture: all
-EOF
-	cat "../../$pkgdir/$pkg" >>control
-	cd ..
+	mkdir -p "$dir/DEBIAN" && cd "$dir"
 	mkdir -p "usr/bin"
 	if [ -f "../$pkgdir/${pkg}.bin" ]; then
 		while read -u 7 line; do
@@ -60,6 +50,17 @@ EOF
 			find "$d" -type f -exec md5sum -b "{}" >>DEBIAN/md5sums \;
 		fi
 	done
+	echo "Package: $pkg" >"DEBIAN/control"
+	echo "Version: $version" >>"DEBIAN/control"
+	echo "Installed-Size: $(du -sk .|sed -r 's/([0-9]+).+/\1/')" >>"DEBIAN/control"
+	cat >>DEBIAN/control <<EOF
+Source: sundman-scripts
+Maintainer: Marcus Sundman <sundman@iki.fi>
+Priority: optional
+Breaks: sundman-scripts (<< 2016.07.10)
+Architecture: all
+EOF
+	cat "../$pkgdir/$pkg" >>"DEBIAN/control"
 	cd ..
 	echo "Making ${dir}.deb"
 	fakeroot dpkg-deb --build "$dir"

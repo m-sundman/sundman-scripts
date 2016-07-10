@@ -1,3 +1,3 @@
 Section: video
-Depends: sed, grep, rsync, aften
+Depends: sed, grep, rsync, aften, libdca-utils
 Description: Convert DTS audio in an MKV file to AC3.
