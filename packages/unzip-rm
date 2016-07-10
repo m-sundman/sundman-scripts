@@ -1,0 +1,3 @@
+Section: utils
+Depends: grep, unzip
+Description: Uncompress a ZIP archive, removing the archive on success.

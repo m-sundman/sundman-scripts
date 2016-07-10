@@ -1,0 +1,3 @@
+Section: utils
+Depends: unrar
+Description: Uncompress RAR archives, removing the archive on success.

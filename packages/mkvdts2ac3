@@ -1,0 +1,3 @@
+Section: video
+Depends: sed, grep, rsync, aften
+Description: Convert DTS audio in an MKV file to AC3.

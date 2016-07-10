@@ -227,4 +227,3 @@ else
 	echo -n ". $_err error"
 	if [ "$_err" == "1" ]; then echo "."; else echo "s."; fi
 fi
-

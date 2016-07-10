@@ -8,4 +8,3 @@ else
 		sed -e 's/[`\\!$"]/\\&/g' |
 		sed -e '/^ID_FILENAME/ { s/^ID_FILENAME=\(.*\)/ID_FILENAME="\1"/g; }'
 fi
-

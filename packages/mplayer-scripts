@@ -1,0 +1,7 @@
+Section: video
+Depends: sed, grep, mplayer
+Provides: rip-dvd-title, midentify, midentify-dvd
+Description: Some scripts using mplayer
+  * midentify      - Display video file info, using mplayer.
+  * midentify-dvd  - Display DVD info, using mplayer.
+  * rip-dvd-title  - Ripping DVD titles, using mplayer.

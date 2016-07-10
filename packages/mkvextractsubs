@@ -1,0 +1,3 @@
+Section: video
+Depends: sed, grep
+Description: Extract subtitles (and lyrics) from an MKV file.
