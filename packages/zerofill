@@ -1,2 +1,0 @@
-Section: utils
-Description: Fill a file with sparse zeros, taking up no disk space.

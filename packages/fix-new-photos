@@ -5,3 +5,4 @@ Description: A script to fix newly imported photos.
  contain useless thumbnails and are not rotated correctly. This script
  fixes all of those (the rotation is automatically corrected only if
  the camera has an orientation sensor).
+ .

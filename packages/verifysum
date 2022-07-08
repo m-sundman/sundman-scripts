@@ -1,0 +1,7 @@
+Section: utils
+Depends: coreutils
+Provides: md5chk
+Replaces: md5chk
+Description: Verify checksums.
+ Autodetect checksum type. Optionally remove matching files.
+ .

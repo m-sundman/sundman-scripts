@@ -1,3 +1,4 @@
 Section: utils
 Depends: file
 Description: Corrects the file extension of files.
+ .

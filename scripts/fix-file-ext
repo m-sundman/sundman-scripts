@@ -1,19 +1,23 @@
 #!/bin/bash
 
-if [ "$#" == "0" ] || [ "x$1" == "x--help" ] || [ "x$1" == "x-h" ]; then
-	echo "Usage: $0 [file [...]]"
+if [[ "$#" -gt 0 ]] && [[ "x$1" == "x-f" ]]; then _force=1; shift; else _force=0; fi
+if [[ "$#" = "0" ]] || [[ "x$1" = "x--help" ]] || [[ "x$1" = "x-h" ]]; then
+	echo "Usage: $0 [-f] <file [...]>"
+	echo
+	echo "Fix the file extension of the specified file(s)"
+	echo "Options:"
+	echo "-f   Replace the old extension even if it's unknown"
 	exit 1
 fi
 _renamed=0
 _err=0
-_suffix="jpg"
 function rename() {
-	if ! [ -e "$1" ]; then
+	if ! [[ -e "$1" ]]; then
 		_ierr=true
 		_imsg="$_imsg Cannot rename '$1' to '$2' because the former does not exist."
 		return 1
 	fi
-	if [ -e "$2" ]; then
+	if [[ -e "$2" ]]; then
 		_ierr=true
 		_imsg="$_imsg Cannot rename '$1' to '$2' because the latter exists."
 		return 1
@@ -28,14 +32,14 @@ function rename() {
 	return 0
 }
 function process() {
-	if ! [ -f "$1" ]; then
+	if ! [[ -f "$1" ]]; then
 		_imsg="$_imsg No such file."
 		return 1
 	fi
 	local mime="$(file -b --mime-type "$1")"
 	local newExt=""
 	case "$mime" in
-		"image/png"|"image/gif"|"image/bmp"|"text/html"|"video/webm"|"video/mp4")
+		"image/png"|"image/gif"|"image/bmp"|"image/webp"|"text/html"|"video/webm"|"video/mp4")
 			newExt="${mime##*/}"
 			;;
 		"image/jpeg")
@@ -47,55 +51,60 @@ function process() {
 		"video/x-matroska")
 			newExt="mkv"
 			;;
+		"video/x-m4v")
+			newExt="mp4"
+			;;
 		*)
 			_imsg="$_imsg Unsupported file type: $mime"
 			return 1
 			;;
 	esac
 	local oldExt="${1##*\.}"
-	if [ "$oldExt" == "$1" ]; then
+	if [[ "$oldExt" = "$1" ]]; then
 		_imsg="$_imsg Missing extension."
 		oldExt=""
 	else
 		oldExt="${oldExt,,}"
-		if [ "$oldExt" == "$newExt" ]; then
+		if [[ "$oldExt" = "$newExt" ]]; then
 			return 0;
 		fi
 		case "$oldExt" in
 			jpg|jpeg|png|gif|bmp|html|htm|txt|webm|mkv|mp4)
 				;;
 			*)
-				_imsg="$_imsg Existing extension unknown: $oldExt"
-				oldExt=""
+				_imsg="$_imsg Existing extension unknown: ${oldExt}."
+				if [[ "$_force" != "1" ]]; then
+					oldExt=""
+				fi
 				;;
 		esac
 	fi
 	local baseName
-	if [ -z "$oldExt" ]; then
+	if [[ -z "$oldExt" ]]; then
 		baseName="${1}."
 	else
 		baseName="${1:0:-${#oldExt}}"
 	fi
 	if rename "$1" "${baseName}${newExt}"; then return 0; else return 1; fi
 }
-while [ $# -ne 0  ]; do
+while [[ $# -gt 0 ]]; do
 	_imsg=""
 	_ierr=false
 	if ! process "$1"; then _err=$((_err+1)); fi
-	if [ "x$_imsg" != "x" ]; then
+	if [[ "x$_imsg" != "x" ]]; then
 		if $_ierr; then echo -n "Error with "; fi
 		echo "$1:$_imsg"
 	fi
 	shift
 done
-if [ "$_renamed" == "0" ] && [ "$_err" == "0" ]; then
+if [[ "$_renamed" = "0" ]] && [[ "$_err" = "0" ]]; then
 	exit 0
 fi
 echo -n "Renamed $_renamed file"
-if ! [ "$_renamed" == "1" ]; then echo -n "s"; fi
-if [ "$_err" == "0" ]; then
+if ! [[ "$_renamed" = "1" ]]; then echo -n "s"; fi
+if [[ "$_err" = "0" ]]; then
 	echo ". All OK."
 else
 	echo -n ". $_err error"
-	if [ "$_err" == "1" ]; then echo "."; else echo "s."; fi
+	if [[ "$_err" = "1" ]]; then echo "."; else echo "s."; fi
 fi

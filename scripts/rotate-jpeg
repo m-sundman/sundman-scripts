@@ -14,7 +14,7 @@ function usage() {
 if [ "$#" == "0" ] || [ "x$1" == "x--help" ] || [ "x$1" == "x-h" ]; then usage; fi
 rot=""
 case "$1" in
-	-0|-90|-270|-H|-V|-A) rot="${1:1}" ;;
+	-0|-90|-180|-270|-H|-V|-A) rot="${1:1}" ;;
 	*) usage ;;
 esac
 shift

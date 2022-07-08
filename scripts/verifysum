@@ -1,0 +1,190 @@
+#!/bin/bash
+
+_count=0
+_err=0
+_ok=0
+_missing=0
+_rm_ok=false
+_rm_dir=""
+_info=1
+_in=-
+_cmd=""
+_cmd_args="-c --quiet -"
+
+function usage() {
+	echo "Usage: $0 [options] <file>"
+	echo " file   A checksum file, or - for stdin."
+	echo "Options:"
+	echo " -d[dir] Delete files that match. If dir is specified then delete files in that directory instead of in the current directory."
+	echo " -v      Verbose output. Show also files testing OK."
+	echo " -q      Completely quiet."
+	echo " -aX     Use Xsum (-amd5 for md5sum or -asha1 for sha1sum) to check."
+	echo "         Default is to autodetect the checksum file type."
+	echo " -m      Ignore missing files."
+	exit 1
+}
+if [ "$#" == "0" ] || [ "x$1" == "x--help" ] || [ "x$1" == "x-h" ]; then usage; fi
+while [ "$#" -gt "0" ] && [ "${1:0:1}" == "-" ] && [ "$1" != "-" ]; do
+	if [ "${1:0:2}" == "-a" ]; then
+		if [ "${#1}" == "2" ]; then
+			if [[ $_info -gt 0 ]]; then
+				echo "Missing algorithm"
+				usage
+			fi
+			exit 1
+		fi
+		if ! which "${1}sum" >/dev/null; then usage; fi
+		_cmd="${1}sum $_cmd_args"
+		shift
+	else
+		case "$1" in
+			-d*)
+				_rm_ok=true
+				if [[ ${#1} -gt 2 ]]; then
+					_rm_dir="${1:2}"
+					if [[ ${#_rm_dir} -gt 0 ]] && [ "${_rm_dir:0-1}" != "/" ]; then
+						_rm_dir="$_rm_dir/"
+					fi
+				fi
+				shift
+				;;
+			-v)
+				_info=2
+				shift
+				;;
+			-q)
+				_info=0
+				shift
+				;;
+			-m)
+				_missing=-1
+				shift
+				;;
+			*)
+				break
+				;;
+		esac
+	fi
+done
+if [ "$1" != "-" ] && ! [[ -f "$1" ]]; then
+	if [[ $_info -gt 0 ]]; then
+		echo "Unknown input: $1"
+		usage
+	fi
+	exit 1
+fi
+
+function check_line() {
+	if [ -z "$_cmd" ]; then
+		_cmd="${1%% *}"
+		_sumsize="${#_cmd}"
+		_cmd="xxx"
+		if [ "$_sumsize" == "32" ]; then
+			_cmd="md5"
+		elif [ "$_sumsize" == "40" ]; then
+			_cmd="sha1"
+		elif [ "$_sumsize" == "56" ]; then
+			_cmd="sha224"
+		elif [ "$_sumsize" == "64" ]; then
+			_cmd="sha256"
+		elif [ "$_sumsize" == "96" ]; then
+			_cmd="sha384"
+		elif [ "$_sumsize" == "128" ]; then
+			_cmd="sha512"
+		elif [[ $_info -gt 0 ]]; then
+			echo "$1"
+			echo "Unknown checksum length: $_sumsize"
+			usage
+		else
+			exit 2
+		fi
+		_cmd="${_cmd}sum $_cmd_args"
+	fi
+	if [ "${1:$_sumsize:2}" != "  " ] && [ "${1:$_sumsize:2}" != " *" ]; then
+		if [[ $_info -gt 0 ]]; then echo " Malformed input line: $1"; fi
+		_err="$((_err+1))"
+	else
+		_count="$((_count+1))"
+		_file="${1:2+$_sumsize}"
+		if ! [[ -f "$_file" ]]; then
+			if [[ $_missing -ge 0 ]]; then
+				_missing="$((_missing+1))"
+				if [[ $_info -gt 0 ]]; then
+					echo "$_file ... MISSING"
+				fi
+			fi
+		else
+			if [[ $_info -ge 2 ]]; then
+				echo -n "$_file ..."
+			fi
+			if echo "$1" | $_cmd 2>/dev/null; then
+				_ok="$((_ok+1))"
+				if $_rm_ok; then
+					if [[ $_info -ge 2 ]]; then
+						echo " OK, deleting"
+						rm -v "$_rm_dir$_file"
+					else
+						rm "$_rm_dir$_file"
+					fi
+				elif [[ $_info -ge 2 ]]; then
+					echo " OK"
+				fi
+			else
+				_err="$((_err+1))"
+				if [[ $_info -ge 2 ]]; then
+					echo " MISMATCH"
+				elif [[ $_info -gt 0 ]]; then
+					echo "$_file ... MISMATCH"
+				fi
+			fi
+		fi
+	fi
+}
+
+if [ "$1" == "-" ]; then
+	while read line; do
+		check_line "$line"
+	done
+else
+	while read line; do
+		check_line "$line"
+	done < "$1"
+fi
+
+if [[ $_info -ge 2 ]]; then
+	echo -n "Processed $_count line"
+	if ! [ "$_count" == "1" ]; then echo -n "s"; fi
+	if [ "$_missing" -gt "0" ]; then echo -n ". $_missing missing"; fi
+	if [ "$_err" == "0" ]; then
+		if [ "$_ok" == 1 ]; then
+			echo ". 1 check passed OK."
+		elif [ "$_ok" -gt 0 ]; then
+			echo ". $_ok checks passed OK."
+		else
+			echo ". No files checked."
+		fi
+	else
+		echo -n ". $_err ERROR"
+		if [ "$_err" == "1" ]; then echo "."; else echo "S."; fi
+	fi
+fi
+
+if [ "$_err" != "0" ] || [ "$_missing" -gt "0" ]; then
+	if [ "$_info" == "1" ]; then
+		if [ "$_missing" -gt "0" ]; then
+			echo -n "$_missing/$_count file"
+			if [ "$_count" != "1" ]; then echo -n "s"; fi
+			echo " missing."
+		fi
+		if [ "$_err" == "0" ]; then
+			echo "All $_ok/$_count files OK"
+		else
+			echo -n "$_err CHECK"
+			if [ "$_err" != "1" ]; then echo -n "S"; fi
+			echo " FAILED"
+		fi
+	fi
+	exit 3
+elif [ "$_info" == "1" ] && [ "$_err" == "0" ]; then
+	echo "All $_ok/$_count files OK"
+fi

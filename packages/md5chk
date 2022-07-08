@@ -1,3 +1,0 @@
-Section: utils
-Depends: grep
-Description: Check md5sums, hiding normal output but showing errors.

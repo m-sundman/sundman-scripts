@@ -2,3 +2,4 @@ Section: graphics
 Depends: exiftool, libjpeg-turbo-progs | libjpeg-progs
 Suggests: geeqie
 Description: Rotates JPEG pictures losslessly.
+ .

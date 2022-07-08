@@ -1,3 +1,4 @@
 Section: sound
 Depends: flac, lame, sed, grep
 Description: Convert FLAC to MP3, using lame.
+ .
