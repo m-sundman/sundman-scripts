@@ -1,0 +1,163 @@
+#!/bin/bash
+set -euo pipefail
+
+target=4
+margin=10
+quality=80
+reduction=10
+verbose=false
+
+usage() {
+>&2 cat << EOF
+Usage: $0 [options] <picture...>
+Options:
+	-t,--target <megapixels>    The number of megapixels to resize to (default: $target)
+	-m,--margin <percentage>    The percentage a picture is allowed to be larger without resizing (default: $margin)
+	-q,--quality <percentage>   The output jpeg quality percentage (default: $quality)
+	-r,--reduction <percentage> The required file size reduction percentage, or else the original is kept instead (default: $reduction)
+	-v,--verbose                Show more information of what is being done.
+	-h,--help                   This help text.
+
+EXAMPLE:
+
+$0 -t 5 -m 20 -q 80 -r 15 *.jpg
+
+This will process all jpg files. Each that is more than 20% larger than 5 megapixels (i.e., has more than 6,000,000 pixels)
+will be resized to 5 megapixels, and others will not be resized. Each file is saved at 80% quality. If the resulting file size
+is less than 85% of the original then the original is replaced by the processed file, otherwise the original file is kept and
+the processed file is discarded.
+
+EOF
+exit 1
+}
+
+args=$(getopt -a -o hvt:m:q:r: --long help,verbose,target:,margin:,quality:,reduction: -- "$@")
+
+if [[ $? -gt 0 ]]; then usage; fi
+
+eval set -- ${args}
+while :
+do
+	case $1 in
+		-t | --target)    target=$2    ; shift 2 ;;
+		-m | --margin)    margin=$2    ; shift 2 ;;
+		-q | --quality)   quality=$2   ; shift 2 ;;
+		-r | --reduction) reduction=$2 ; shift 2 ;;
+		-v | --verbose)   verbose=true ; shift   ;;
+		-h | --help)      usage        ; shift   ;;
+		# -- means the end of the arguments; drop this, and break out of the while loop
+		--) shift; break ;;
+		*) >&2 echo Unsupported option: $1
+			usage ;;
+	esac
+done
+
+num='^[0-9]+([.][0-9]+)?$'
+
+if ! [[ "$target" =~ $num ]]; then >&2 echo "ERROR: Invalid number: $target"; exit 2; fi
+if ! [[ "$margin" =~ $num ]]; then >&2 echo "ERROR: Invalid number: $margin"; exit 2; fi
+if ! [[ "$quality" =~ $num ]]; then >&2 echo "ERROR: Invalid number: $quality"; exit 2; fi
+if ! [[ "$reduction" =~ $num ]]; then >&2 echo "ERROR: Invalid number: $reduction"; exit 2; fi
+
+target="$(echo "scale=0; ($target*1000000)/1"|bc)"
+margin="$(echo "scale=0; ($target*($margin+100))/100"|bc)"
+quality="$(echo "scale=0; $quality/1"|bc)"
+reduction="$(echo "scale=0; $reduction/1"|bc)"
+
+if [[ $# -eq 0 ]]; then >&2 echo "ERROR: Missing input files."; usage; exit 1; fi
+
+if [[ $target == 0 ]]; then >&2 echo "ERROR: Invalid target pixel count: $target"; exit 3; fi
+if [[ $quality -lt 2 ]] || [[ $quality -gt 100 ]]; then >&2 echo "ERROR: Invalid quality percentage: $quality"; exit 3; fi
+if [[ $reduction -ge 100 ]]; then >&2 echo "ERROR: Invalid reduction percentage: $reduction"; exit 3; fi
+
+if $verbose; then
+	>&2 env LC_NUMERIC="" printf "target pixel count: %'d px\n" ${target}
+	>&2 env LC_NUMERIC="" printf "input pixel count threshold: %'d px\n" ${margin}
+	>&2 echo "output JPEG quality: ${quality} %"
+	>&2 echo "required reduction: -${reduction} %"
+fi
+
+errors=0
+reductions=0
+ignored=0
+
+while [[ $# -gt 0 ]]; do
+	mime="$(file -b --mime-type "$1")"
+	if [[ "${mime%%/*}" != "image" ]]; then
+		errors="$((errors+1))"
+		>&2 echo "ERROR processing $1: Unsupported file type: $mime"
+		shift
+		continue
+	fi
+	res=$(identify -precision 32 -format '%[fx:w*h]' "$1")
+	res_opt=""
+	if [[ $res -gt $margin ]]; then
+		res_opt="-resize ${target}@"
+		#if $verbose; then >&2 env LC_NUMERIC="" printf "Resizing $1: %'d px -> %'d px\n" $res $target; fi
+	fi
+	dir="$(dirname "$1")"
+	ext="${1##*\.}"
+	in_place=false
+	if [[ "$ext" == "jpg" ]]; then
+		tmp="$(mktemp -p "$dir" --suffix=.jpg)"
+	else
+		tmp="${1:0:0-${#ext}}jpg"
+		if [[ -e "$tmp" ]]; then
+			errors="$((errors+1))"
+			>&2 echo "ERROR processing $1: Target file already exists: $tmp"
+			shift
+			continue
+		fi
+		touch "$tmp"
+		in_place=true
+	fi
+	if ! convert $res_opt -quality $quality -sampling-factor 4:2:0 -strip -interlace plane -colorspace RGB "$1" "JPG:$tmp"; then
+		errors="$((errors+1))"
+		>&2 echo "ERROR processing $1"
+		rm "$tmp"
+		shift
+		continue
+	fi
+	size_src="$(stat '--format=%s' "$1")"
+	size_dst="$(stat '--format=%s' "$tmp")"
+	size_cutoff="$(echo "scale=0; (${size_src}*(100-$reduction))/100"|bc)"
+	if [[ $size_dst -le $size_cutoff ]]; then
+		reductions="$((reductions+1))"
+		if $verbose; then
+			if [[ -n "$res_opt" ]]; then
+				res_opt="$(identify -precision 32 -format '%[fx:w*h]' "$tmp")"
+				res_opt="$(env LC_NUMERIC="" printf "Resized %'d -> %'d px." $res $res_opt)"
+			else
+				res_opt="$(env LC_NUMERIC="" printf "Keeping size %'d px." $res)"
+			fi
+			>&2 env LC_NUMERIC="" printf "$1: ${res_opt} Reduced %'d -> %'d\n" $size_src $size_dst
+		fi
+		touch -r "$1" "$tmp"
+		if $in_place; then
+			rm -f "$1"
+		else
+			mv -f "$tmp" "$1"
+		fi
+	else
+		rm -f "$tmp"
+		ignored="$((ignored+1))"
+		if $verbose; then
+			>&2 env LC_NUMERIC="" printf "$1: Ignoring because reduction was only $(echo "scale=1; ((${size_dst}*100)/$size_src)-100"|bc)%% (%'d -> %'d)\n" $size_src $size_dst
+		fi
+	fi
+	shift
+done
+
+if $verbose; then
+	>&2 echo "Reductions: $reductions files"
+	>&2 echo "Ignored: $ignored files"
+fi
+if [[ $errors -gt 0 ]]; then
+	>&2 echo "Errors: $errors files"
+fi
+
+if [[ $errors -gt 0 ]]; then
+	exit 5
+else
+	exit 0
+fi

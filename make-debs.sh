@@ -13,7 +13,7 @@ fi
 
 built=""
 
-rm -fr "$dstdir" 
+rm -fr "$dstdir"
 mkdir -p "$dstdir"
 
 version="$(date +%Y.%m.%d)-1"
@@ -85,4 +85,3 @@ EOF
 fakeroot dpkg-deb --build "$dir"
 mv "${dir}.deb" "$dstdir/"
 rm -r "$dir"
-

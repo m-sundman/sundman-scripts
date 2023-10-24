@@ -1,0 +1,7 @@
+Section: graphics
+Depends: imagemagick, bc
+Description: A script to reduce the resolution and size of photos
+ This script will process photos in a smart way, reducing resolution
+ (in megapixels) and/or recompressing them, but only if the resulting
+ file is smaller by a given margin.
+ .
