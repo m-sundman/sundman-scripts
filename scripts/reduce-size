@@ -130,7 +130,7 @@ while [[ $# -gt 0 ]]; do
 			else
 				res_opt="$(env LC_NUMERIC="" printf "Keeping size %'d px." $res)"
 			fi
-			>&2 env LC_NUMERIC="" printf "$1: ${res_opt} Reduced %'d -> %'d\n" $size_src $size_dst
+			>&2 env LC_NUMERIC="" printf "$1: ${res_opt} Reduced %d%%: %'d -> %'d\n" $(( 100 - (size_dst*100+50)/size_src )) $size_src $size_dst
 		fi
 		touch -r "$1" "$tmp"
 		if $in_place; then
