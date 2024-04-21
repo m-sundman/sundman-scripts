@@ -126,11 +126,13 @@ while [[ $# -gt 0 ]]; do
 		if $verbose; then
 			if [[ -n "$res_opt" ]]; then
 				res_opt="$(identify -precision 32 -format '%[fx:w*h]' "$tmp")"
-				res_opt="$(env LC_NUMERIC="" printf "Resized %'d -> %'d px." $res $res_opt)"
+				res_opt="$(awk "BEGIN { printf(\"Resized %.1f MP -> %.1f MP\", $res/1000000, $res_opt/1000000) }")"
+				#res_opt="$(env LC_NUMERIC="" printf "Resized %'d -> %'d px." $res $res_opt)"
 			else
-				res_opt="$(env LC_NUMERIC="" printf "Keeping size %'d px." $res)"
+				res_opt="$(awk "BEGIN { printf(\"Keeping size %.1f MP\", $res/1000000) }")"
+				#res_opt="$(env LC_NUMERIC="" printf "Keeping size %'d px." $res)"
 			fi
-			>&2 env LC_NUMERIC="" printf "$1: ${res_opt} Reduced %d%%: %'d -> %'d\n" $(( 100 - (size_dst*100+50)/size_src )) $size_src $size_dst
+			>&2 env LC_NUMERIC="" printf "Reduced %d%% (${res_opt}, %'d -> %'d): $1\n" $(( 100 - (size_dst*100+50)/size_src )) $size_src $size_dst
 		fi
 		touch -r "$1" "$tmp"
 		if $in_place; then
@@ -142,7 +144,7 @@ while [[ $# -gt 0 ]]; do
 		rm -f "$tmp"
 		ignored="$((ignored+1))"
 		if $verbose; then
-			>&2 env LC_NUMERIC="" printf "$1: Ignoring because reduction was only $(echo "scale=1; ((${size_dst}*100)/$size_src)-100"|bc)%% (%'d -> %'d)\n" $size_src $size_dst
+			>&2 env LC_NUMERIC="" printf "Ignoring because reduction was only $(echo "scale=1; ((${size_dst}*100)/$size_src)-100"|bc)%% (%'d -> %'d): $1\n" $size_src $size_dst
 		fi
 	fi
 	shift
