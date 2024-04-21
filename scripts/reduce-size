@@ -25,7 +25,8 @@ $0 -t 5 -m 20 -q 80 -r 15 *.jpg
 This will process all jpg files. Each that is more than 20% larger than 5 megapixels (i.e., has more than 6,000,000 pixels)
 will be resized to 5 megapixels, and others will not be resized. Each file is saved at 80% quality. If the resulting file size
 is less than 85% of the original then the original is replaced by the processed file, otherwise the original file is kept and
-the processed file is discarded.
+the processed file is discarded. If the orientation flag is set then it will be applied, so if this is not desired then unset
+the flag before running this.
 
 EOF
 exit 1
@@ -111,7 +112,7 @@ while [[ $# -gt 0 ]]; do
 		touch "$tmp"
 		in_place=true
 	fi
-	if ! convert $res_opt -quality $quality -sampling-factor 4:2:0 -strip -interlace plane -colorspace RGB "$1" "JPG:$tmp"; then
+	if ! convert -auto-orient $res_opt -quality $quality -sampling-factor 4:2:0 -strip -interlace plane -colorspace RGB "$1" "JPG:$tmp"; then
 		errors="$((errors+1))"
 		>&2 echo "ERROR processing $1"
 		rm "$tmp"
